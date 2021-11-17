@@ -1,0 +1,293 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>reveal.js</title>
+
+		<link rel="stylesheet" href="dist/reset.css">
+		<link rel="stylesheet" href="dist/reveal.css">
+		<link rel="stylesheet" href="dist/theme/cs.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="plugin/highlight/monokai.css">
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+        <section>
+          <h1>Secrecy</h1>
+        </section>
+
+        <section>
+          <h2>Symmetric Encryption</h2>
+          <img src="images/symmetric.png"/>
+        </section>
+
+        <section>
+          <h2>AES: Advanced Encryption Standard</h2>
+          <p>Rijndael block cipher</p>
+          <img src="images/aes-ecb.png"/>
+        </section>
+
+        <section>
+          Using AES in the browser:
+
+          <ol>
+            <li>Encoded message</li>
+            <li>Key</li>
+            <li>Initialisation vector</li>
+            <li>Authenticated Associated Data (AAD)</li>
+          </ol>
+
+          <aside class="notes">
+            Encrypting a message with AES has 3 required steps and an additional optional step.
+            I'll run through how to correctly encode a message, create a key and safely generate an initalisation vector
+            using the latest web crypto API running in the browser.
+            Then we'll take a look at how to use Authenticated Associated Data to add tamper proof metadata to the message.
+          </aside>
+        </section>
+
+        <section>
+          1. Convert to an <code class="language-javascript">ArrayBuffer</code>
+          <pre>
+            <code class="langauge-javascript" data-line-numbers="1|2" data-trim>
+              let enc = new TextEncoder()
+              let plaintext = enc.encode("this is a secret message")
+            </code>
+          </pre>
+          <aside class="notes">
+            Let's start with encoding. We can't just encrypt a string directly with web crypto.
+            We first have to encode the message into a consistent binary format.
+            To do that we'll instantiate a new text encoder
+            and pass the message to the encode function.
+        </section>
+
+        <section data-markdown>
+          AES Keys
+          128
+          192
+          256
+          The same key is used for both encrypt and decrypt
+          Block size is _always_ 16-bytes
+          <aside class="notes">
+            Next we need to either load or generate a key.
+            AES keys can be 128, 192 or 256 bits in length.
+            256-bits is the most secure but applies more rounds (10 vs 14) and so will take longer.
+            Note, that the block size does not change with different key sizes so using a larger
+            key doesn't result in a larger ciphertext. It's only really performance you're trading off here.
+          </aside>
+        </section>
+
+				<section>
+          2. Generating a Key
+
+          <pre>
+          <code data-line-numbers="1|2-5|6|7" data-trim class="language-javascript">
+let key = await window.crypto.subtle.generateKey(
+  {
+    name: "AES-GCM",     // Mode
+    length: 256          // Key size
+  },
+  true,                  // Allow exporting
+  ["encrypt", "decrypt"] // Allowed usage
+)
+          </code></pre>
+          <aside class="notes">
+            
+          </aside>
+        </section>
+
+        <section>
+          <h3>3. Initialisation Vector</h3>
+          <p class="fragment fade-left">...but first some theory!</p>
+        </section>
+
+        <section>
+          <h3>Electronic Code Book</h3>
+          <p><em>Deterministic</em> Encryption</p>
+          <pre>
+            <code class="language-javascript" data-trim data-line-numbers="1|2|3">
+            AES(k, "dog") // Fails!
+            AES(k, "dog0000000000000") = "0b36a49defdf08b5d71e27..."
+            AES(k, "dog0000000000000") = "0b36a49defdf08b5d71e27..."
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <p>Deterministic encryption is not secure!</p>
+          <pre>
+            <code class="language-javascript" data-trim>
+          AES(k, "dan@coderdan.co0") => "86cac65c67488991299d753..."
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <pre>
+            <code class="language-sql" data-trim>
+          SELECT email_ct, product_name FROM purchases;
+            </code>
+          </pre>
+
+          <pre>
+            <code class="language-markdown" data-trim data-line-numbers="0|3,5">
+          | product    | email
+          |------------|----------------------------------|
+          | Pizza      | 86cac65c67488991299d753f697f11fd |
+          | Milk       | 6ef04978077008442b8378760c92ed49 |
+          | Chocolate  | 86cac65c67488991299d753f697f11fd |
+          </code>
+          </pre>
+        </section>
+
+        <section>
+          <img src="images/ecb.png" />
+        </section>
+
+        <section>
+          <h3>Randomised Encryption</h3>
+          <pre>
+            <code class="language-javascript" data-trim>
+          AES(r, k, m) = [r, ct]
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          
+          <pre>
+            <code class="language-javascript" data-trim data-line-numbers="1-2|4-5">
+          AES("041e6ab6031ecb6dc08665f0b072a8b8", k, "dog")
+          // => "0b36a49defdf08b5d71e27c12949dac7"
+
+          AES("c8e799d08724d31e8fe86dce93fc69c5", k, "dog")
+          // => "78032585e79c4465221fd2176dae21ba"
+            </code>
+          </pre>
+          <p><small>(Not showing padding for readability)</small></p>
+        </section>
+        
+        <section>
+          <h3>Nonce: Number used once!</h3>
+          <p>r is called the "nonce" or the "initialisation vector" (IV)</p>
+          <p class="fragment">It must <strong>never</strong> be repeated</p>
+        </section>
+
+        <section>
+          <h3>Choosing a nonce</h3>
+          <p>Option 1: using a counter</p>
+
+          <pre>
+            <code data-trim class="langauge-javascript">
+            let buf = new ArrayBuffer(8)
+            let iv = new BigUint64Array(buf)
+            iv.set([1n]) // Increment every call to encrypt
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <h2>Warning!</h2>
+          <p><strong>Never</strong> reuse an IV.</p>
+        </section>
+
+        <section>
+          <p>Option 2: Strong Random Number</p>
+          <pre>
+            <code data-trim class="language-javascript">
+let iv = window.crypto.getRandomValues(new Uint8Array(16))
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          Will we get a repeated value after <code>n</code> IVs?
+          \[\begin{aligned}
+          Pr[collision] = 1 - e^{n^2/(2^{b+1} - 1)}
+          \end{aligned} \]
+          Where <code>b</code> is the IV size in bits.
+        </section>
+
+        <section>
+          <p>A 32-bit (4-byte) IV?</p>
+          <p>After 100,000 encryptions</p>
+          \[\begin{aligned}
+          1-e^{-100000^2/(2^{33}-1)}
+          \end{aligned} \]
+
+          <h3 class="fragment">...68.5%!</h3>
+        </section>
+
+        <section>
+          <p>A 64-bit (8-byte) IV?</p>
+          <p>After 100,000 encryptions</p>
+          \[\begin{aligned}
+          1-e^{-100000^2/(2^{65}-1)}
+          \end{aligned} \]
+
+          <p class="fragment">2.7x10^-10 (or less than 1 in a billion)!</p>
+        </section>
+
+        <section>
+          <p>After 1,000,000,000 encryptions</p>
+          \[\begin{aligned}
+          1-e^{-100000^2/(2^{65}-1)}
+          \end{aligned} \]
+
+          <p class="fragment">2.7%</p>
+        </section>
+
+        <section>
+          <p>If in doubt just use 128-bits</p>
+          <pre>
+            <code data-trim class="language-javascript">
+// 16-bytes = 128 bits
+let iv = window.crypto.getRandomValues(new Uint8Array(16))
+            </code>
+          </pre>
+        </section>
+
+        <section>
+          <p>Putting it all together</p>
+          <pre>
+            <code data-line-numbers="1|3|4|6|7" data-trim class="language-javascript">
+let ciphertext = await crypto.subtle.encrypt(
+  {
+    name: "AES-GCM",
+    iv: iv
+  },
+  key,
+  plaintext
+)
+            </code>
+          </pre>
+        </section>
+
+        <!-- TODO: use cases -->
+        <!-- TODO: Quantum Safety -->
+        <!-- TODO: Advantages of AES-GCM over other modes, talk about other modes, FIPS etc -->
+        <!-- TODO: Smells, show case studies of mistakes in implementation (e.g. reusing IVs) -->
+			</div>
+		</div>
+
+		<script src="dist/reveal.js"></script>
+		<script src="plugin/notes/notes.js"></script>
+		<script src="plugin/markdown/markdown.js"></script>
+		<script src="plugin/highlight/highlight.js"></script>
+    <script src="plugin/math/math.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes, RevealMath.KaTeX ]
+			});
+		</script>
+	</body>
+</html>
