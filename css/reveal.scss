@@ -1819,3 +1819,6 @@ $notesWidthPercent: 25%;
 @import 'print/pdf.scss';
 @import 'print/paper.scss';
 
+.speaker-controls-notes {
+  border: solid red 1px;
+}

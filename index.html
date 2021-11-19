@@ -16,29 +16,115 @@
 	<body>
 		<div class="reveal">
 			<div class="slides">
+        <!-- INtro - iceberg, demons? Simple API but lots of gotchas -->
         <section>
-          <h1>Secrecy</h1>
+          <h2>Cryptography</h2>
+          <h3>in the <strong>Browser</strong></h3>
+        </section>
+
+        <section>
+          <h2><em>Why?</em></h2>
+          <aside class="notes">
+            The first question you should probably ask is why would we even want to do cryptography in the browser?
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/trust-1.png"/>
+          <aside class="notes">
+            A good answer to this question comes from considering a model of trust in modern web computing.
+            In most applications, the web-backend is a trusted actor. While network communications are encrypted,
+            the web backend typically has access to unencrypted information. So, in any security model, we must ask,
+            can the web backend be trusted.
+          </aside>
+        </section>
+
+        <section>
+          <h2>Shifting Trust</h2>
+          <img src="images/trust-2.png"/>
+          <aside class="notes">
+            By encrypting in the browser, with keys controlled by the individual, we can effectively remove the web backend from
+            the trust model.
+          </aside>
+        </section>
+
+        <section>
+          <h2>State of Crypto</h2>
+          <ol>
+            <li>Web Assembly (e.g. Rust)</li>
+            <li>Web Crypto API</li>
+          </ol>
+
+          <aside class="notes">
+            So what is the state of cryptography in the browser? There are 2 main options.
+            Web Assembly say using a language like Rust, or the new Web Crypto standard.
+            In this talk, I'll just be talking about the latter.
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/support.png"/>
+
+          <aside class="notes">
+            Web Crypto is quite well supported now and is available in most browsers.
+            Node.js now also implements the API for the backend.
+          </aside>
+        </section>
+
+        <section>
+          <h2><code>SubtleCrypto</code></h2>
+          <p>There be <strong>demons!</strong></p>
+          <aside class="notes">
+            The main interface to the Web Crypto API is called SubtleCrypto. This is to avoid naming clashes with older
+            (and insecure) modules simply called crypto. But also to remind us that it is easy to make subtle but nonetheless
+            devastating mistakes with cryptography. There be demons.
+          </aside>
+        </section>
+
+        <section>
+          <h2><strong>HTTPS</strong> Only</h2>
+          <img src="images/chrome.png" />
+          <aside class="notes">
+            One other small gotcha is that Web Crypto only works when the browser is connected via HTTPS (probably for obvious reasons).
+            So for testing I typically just navigate to any secure site and use the Chrome dev tools to play around.
+          </aside>
+        </section>
+
+        <section>
+          <h2>Secrecy</h2>
+          <aside class="notes">
+            Ok so let's talk about what we're all here for - how to make things secret!
+          </aside>
         </section>
 
         <section>
           <h2>Symmetric Encryption</h2>
           <img src="images/symmetric.png"/>
+          <aside class="notes">
+            There are 2 main forms of encryption - symmetric and assymetric. Cryptography is a big topic
+            and we only have only around 20 minutes so I'm going to just focus on symmetric encryption but I _will_
+            go a little deeper than the typical developer talk on encryption.
+          </aside>
         </section>
 
         <section>
-          <h2>AES: Advanced Encryption Standard</h2>
+          <h3><strong>AES:</strong> Advanced Encryption Standard</h3>
           <p>Rijndael block cipher</p>
           <img src="images/aes-ecb.png"/>
+          <aside class="notes">
+            There are also many flavours of symmetric encryption but by far the most common and trusted symmetric cipher is Advanced Encryption Standard
+            or as it was originally known, the Rijndael block cipher.
+          </aside>
         </section>
 
         <section>
-          Using AES in the browser:
+          <h3>Using AES in the browser</h3>
 
           <ol>
-            <li>Encoded message</li>
-            <li>Key</li>
-            <li>Initialisation vector</li>
-            <li>Authenticated Associated Data (AAD)</li>
+            <li class="fragment">Encoded message</li>
+            <li class="fragment">Key</li>
+            <li class="fragment">Initialisation vector</li>
+            <li class="fragment">Authenticated Associated Data (AAD)</li>
           </ol>
 
           <aside class="notes">
@@ -64,19 +150,22 @@
             and pass the message to the encode function.
         </section>
 
-        <section data-markdown>
-          AES Keys
-          128
-          192
-          256
-          The same key is used for both encrypt and decrypt
-          Block size is _always_ 16-bytes
+        <section>
+          <h3>AES Keys</h3>
+          <p>
+          <span class="fragment">128-bit,</span>
+          <span class="fragment">192-bit</span>
+          <span class="fragment">or 256-bit</span>
+          </p>
+          <p class="fragment">Block size is <strong>always</strong> 16-bytes</p>
+          <p class="fragment">The same key is used for both <em>encrypt and decrypt</em></p>
           <aside class="notes">
             Next we need to either load or generate a key.
             AES keys can be 128, 192 or 256 bits in length.
-            256-bits is the most secure but applies more rounds (10 vs 14) and so will take longer.
+            256-bits will be the most secure but applies more encryption rounds (10 vs 14) and so will take longer.
             Note, that the block size does not change with different key sizes so using a larger
             key doesn't result in a larger ciphertext. It's only really performance you're trading off here.
+            Also remember that because AES is symmetric you use the same key to both encrypt and decrypt.
           </aside>
         </section>
 
@@ -95,25 +184,43 @@ let key = await window.crypto.subtle.generateKey(
 )
           </code></pre>
           <aside class="notes">
-            
+            We can use the SubtleCrypto interface to generate a key in the browser.
+            The generateKey function returns a promise and takes 3 arguments.
+            The first is an object specifying the encryption mode (which we'll explain later)
+            and the key size. Think of this as the "algorithm" specifier.
+            The second argument indicates whether we can export the key for later use
+            and the final argument tells the API what operations are allowed with this instance of the key.
+            Might want limit the use.
           </aside>
         </section>
 
         <section>
           <h3>3. Initialisation Vector</h3>
           <p class="fragment fade-left">...but first some theory!</p>
+          <aside class="notes">
+            The next step is to generate an initialization vector.
+            This is where I see a lot of mistakes.
+            But first, some theory!
+          </aside>
         </section>
 
         <section>
           <h3>Electronic Code Book</h3>
-          <p><em>Deterministic</em> Encryption</p>
+          <p><em>Deterministic Block</em> Encryption</p>
           <pre>
-            <code class="language-javascript" data-trim data-line-numbers="1|2|3">
-            AES(k, "dog") // Fails!
-            AES(k, "dog0000000000000") = "0b36a49defdf08b5d71e27..."
-            AES(k, "dog0000000000000") = "0b36a49defdf08b5d71e27..."
+            <code class="language-javascript" data-trim data-line-numbers="2|3|4">
+            // Pseudo-code
+            AESEnc(k, "dog0000000000000") = "0b36a49defdf08b5d71e27..."
+            AESDec(k, "0b36a49defdf08b5d71e27...") = "dog0000000000000"
+            AESEnc(k, "dog") // Fails!
             </code>
           </pre>
+          <aside class="notes">
+            AES in its raw form is called ECB or Electronic Code Book.
+            It converts a plaintext block into a ciphertext block and back again.
+
+            If the plaintext is not 16-bytes long, the operation will fail!
+          </aside>
         </section>
 
         <section>
@@ -123,6 +230,10 @@ let key = await window.crypto.subtle.generateKey(
           AES(k, "dan@coderdan.co0") => "86cac65c67488991299d753..."
             </code>
           </pre>
+          <aside class="notes">
+            There are a few things to unpack here. The first is that an AES Electronic Code Book
+            is deterministic...and that isn't very secure.
+          </aside>
         </section>
 
         <section>
@@ -141,39 +252,71 @@ let key = await window.crypto.subtle.generateKey(
           | Chocolate  | 86cac65c67488991299d753f697f11fd |
           </code>
           </pre>
+          <aside class="notes">
+            To understand why, let's look at an example.
+            I have a simple database that stores product purchases along with the encrypted
+            email address of a buyer using a deterministic scheme (e.g. AES in ECB).
+            <br/>
+            Notice that one of the encrypted email addresses repeats. That means the person who bought
+            a Pizza, also bought chocolate! We've learned something about the data.
+            <br/>
+            If an attacker was able to determine the encryption of an email address, they can find all
+            coresponding purchases. This is known as a chosen plaintext attack and there are many
+            examples of large amounts of data being leaked because of them.
+          </aside>
         </section>
 
         <section>
           <img src="images/ecb.png" />
+          <aside class="notes">
+            A good way to see why deterministic encryption has poor security is with this visualisation.
+            As you can see, with ECB, the image is still quite visible, despite being encrypted.
+            The image on the right uses randomised encryption and is totally unintelligible.
+          </aside>
         </section>
 
         <section>
           <h3>Randomised Encryption</h3>
           <pre>
             <code class="language-javascript" data-trim>
-          AES(r, k, m) = [r, ct]
+          // Pseudo-code
+          AESEnc(r: IV, k: CryptoKey, m: Message)
             </code>
           </pre>
+          <aside class="notes">
+            To achieve randomised encryption, we need to extend the encrypt function
+            to take an additional piece of data called an Initialisation Vector or IV.
+          </aside>
         </section>
 
         <section>
-          
+          <p>Use the <em>Initialisation Vector</em> for non-determinstic encryption</p>
           <pre>
             <code class="language-javascript" data-trim data-line-numbers="1-2|4-5">
-          AES("041e6ab6031ecb6dc08665f0b072a8b8", k, "dog")
+          AES("041e6ab6031ecb6dc08665f0b072a8b8", k, "0000000000000000")
           // => "0b36a49defdf08b5d71e27c12949dac7"
 
-          AES("c8e799d08724d31e8fe86dce93fc69c5", k, "dog")
+          AES("c8e799d08724d31e8fe86dce93fc69c5", k, "0000000000000000")
           // => "78032585e79c4465221fd2176dae21ba"
             </code>
           </pre>
-          <p><small>(Not showing padding for readability)</small></p>
+          <aside class="notes">
+            Every time we encrypt a message, we use a new IV and so multiple encryptions
+            of the same message result in different output ciphertexts.
+          </aside>
         </section>
         
         <section>
-          <h3>Nonce: Number used once!</h3>
-          <p>r is called the "nonce" or the "initialisation vector" (IV)</p>
-          <p class="fragment">It must <strong>never</strong> be repeated</p>
+          <h3><strong>Nonce:</strong> Number used once!</h3>
+          <p class="fragment">IVs must <strong>never</strong> be repeated</p>
+          <p class="fragment">Hardcoded IVs result in deterministic encryption!</p>
+          <aside class="notes">
+            IVs are sometimes called a Nonce or a number used once. This is because to be secure,
+            an IV must never repeat.
+            <br/>
+            I often see code with hard-coded IVs. This is a big problem because the encryption
+            is now deterministic.
+          </aside>
         </section>
 
         <section>
@@ -187,11 +330,13 @@ let key = await window.crypto.subtle.generateKey(
             iv.set([1n]) // Increment every call to encrypt
             </code>
           </pre>
-        </section>
-
-        <section>
-          <h2>Warning!</h2>
-          <p><strong>Never</strong> reuse an IV.</p>
+          <aside class="notes">
+            So how do we choose each IV so that it is never repeated?
+            The first option is to use a counter that we increment every time we encrypt.
+            This approach is generally fine but you must be careful to ensure the counter never resets.
+            Managing counters in distributed or multiuser systems like ..._the web_ can be hard, too
+            so another approach is preferred when using web crypto.
+          </aside>
         </section>
 
         <section>
@@ -201,14 +346,50 @@ let key = await window.crypto.subtle.generateKey(
 let iv = window.crypto.getRandomValues(new Uint8Array(16))
             </code>
           </pre>
+          <aside class="notes">
+            Option 2 is to use a secure random mumber for your IV every time you call encrypt.
+            This is usually a better approach for web crypto but also comes with some gotchas.
+          </aside>
         </section>
 
         <section>
-          Will we get a repeated value after <code>n</code> IVs?
+          <img src="images/random.png" />
+          <aside class="notes">
+            If you randomly select a value from a finite set of possible values, eventually you will get the same value twice.
+            And actually, a value will repeat sooner than might be obvious.
+          </aside>
+        </section>
+
+        <section>
+          <h3>23 people at a party</h3>
+          <p>How many <em>share a birthday?</em></p>
+          <aside class="notes">
+            To illustrate this, let's look at the birthday paradox. If there are 23 people at a party,
+            what is the probability that two of them will have the same birthday? Put another way, what is the
+            probably of a collision given a random selection of 2 numbers from a possible set of 365?
+          </aside>
+        </section>
+
+        <section>
+          <h2><em>50%</em></h2>
+          <img src="images/birthday-graph.png" />
+          <aside class="notes">
+            Its actually about 1 in 2. So the next time you're at a party with at least 22 other people
+            there is a 50% chance that someone else there shares your birthday. Crazy right!?
+          </aside>
+        </section>
+
+        <section>
+          Will we get a repeated value after <strong><code>n</code></strong> IVs?
           \[\begin{aligned}
           Pr[collision] = 1 - e^{n^2/(2^{b+1} - 1)}
           \end{aligned} \]
           Where <code>b</code> is the IV size in bits.
+          <aside class="notes">
+            This fun fact is somewhat of a problem for selecting our IV though.
+            In general, we can calculate the probability of a repeating IV for an n-bit number
+            using the following formula.
+          </aside>
         </section>
 
         <section>
@@ -219,6 +400,14 @@ let iv = window.crypto.getRandomValues(new Uint8Array(16))
           \end{aligned} \]
 
           <h3 class="fragment">...68.5%!</h3>
+          <aside class="notes">
+            So what about a 32-bit number? Which could be represented by the whole component of a number in JavaScript.
+            After 100,000 encryptions, what's the probability that we'll get a repeating IV?
+            <br/>
+            Over 68.5%!
+            <br/>
+            So a 32-bit nonce really isn't big enough for most applications.
+          </aside>
         </section>
 
         <section>
@@ -229,6 +418,11 @@ let iv = window.crypto.getRandomValues(new Uint8Array(16))
           \end{aligned} \]
 
           <p class="fragment">2.7x10^-10 (or less than 1 in a billion)!</p>
+          <aside class="notes">
+            So what about a 64-bit number? Using a BigInt in JavaScript?
+            <br/>
+            After 100,000 encryptions, there is less than 1 in a billion chance of a collision.
+          </aside>
         </section>
 
         <section>
@@ -238,6 +432,14 @@ let iv = window.crypto.getRandomValues(new Uint8Array(16))
           \end{aligned} \]
 
           <p class="fragment">2.7%</p>
+          <p class="fragment">16 GB</p>
+          <aside class="notes">
+            However, after a billion encryptions the probability of a repeated IV jumps to 2.7%.
+            <br/>
+            That sounds like a lot of encryptions. But consider that 1-billion, 16-byte blocks is only 16GB.
+            If you encrypt a 1 TB SSD using this approach you'd get a lot of repeated IVs which gives a
+            motivated attacker plenty of advantage.
+          </aside>
         </section>
 
         <section>
@@ -248,12 +450,251 @@ let iv = window.crypto.getRandomValues(new Uint8Array(16))
 let iv = window.crypto.getRandomValues(new Uint8Array(16))
             </code>
           </pre>
+          <aside class="notes">
+            So really, the safest approach is to use a 128-bit secure random IV
+            which is really pretty easy to do with web crypto.
+            <br/>
+            But by now you're probably starting to see that even a relatively simple
+            API like this can lead to major issues if not used correctly.
+          </aside>
         </section>
 
         <section>
-          <p>Putting it all together</p>
+          <p><em>Don't</em> do this!</p>
           <pre>
-            <code data-line-numbers="1|3|4|6|7" data-trim class="language-javascript">
+            <code class="language-javascript" data-trim>
+            Math.floor(Math.random()*10000000)
+            </code>
+          </pre>
+
+          <aside class="notes">
+            One other trap to avoid is the use of Math.random to generate an IV. Aside from generating numbers that are 2 small,
+            this isn't a cryptographically secure random number generator. In simple terms, that means
+            that attackers can often guess the numbers that they generate. Non-cryptrographically secure random number generators
+            also have much higher collision rates and lead to data exploits.
+         </aside>
+        </section>
+
+        <section>
+          <h3>Short Messages</h3>
+
+          <aside class="notes">
+            The other problem with AES ECB is that messages must be exactly 16-bytes long.
+            To address this, let's first look at how to deal with short messages.
+          </aside>
+        </section>
+
+        <section>
+          <h3>Padding</h3>
+          <pre>
+            <code class="language-javascript" data-trim>
+              pad("1000")
+              // => "1000000000000000"
+            </code>
+          </pre>
+          <aside class="notes">
+            Short messages can be padded to fill out the 16-byte block size.
+            However, this isn't as simple as it sounds. We can't just pad with zeros
+            because there is no way to tell where the message ends and where the padding begins.
+          </aside>
+        </section>
+
+
+        <section>
+          <h3>PKCS#7</h3>
+          <p>Public Key Cryptography Standard #7</p>
+          <aside class="notes">
+            But the good news is that we don't really need to worry about it. There are plenty of
+            standards for padding data properly. One of the common ones being PKCS#7.
+            As we'll see later, web crypto does the hard work for us but it can be helpful to know what's
+            going on under the hood. Some padding schemes have been shown to be vulnerable to attacks
+            like the padding oracle attack if not implemented correctly.
+          </aside>
+        </section>
+
+        <section>
+          <p>Messages longer than a block</p>
+          <pre>
+            <code class="language-javascript" data-trim>
+            ["The quick brown ", "fox jumped over ", "the lazy dog"]
+            </code>
+          </pre>
+          <aside class="notes">
+            We can encrypt messages longer than a single block by breaking it up into 16-byte chunks
+            (and padding the last chunk if it is smaller than a block).
+            But if we have any repeated data in the plaintext, we'll get repeated blocks in the ciphertext.
+            In other words, we'd get deterministic encryption.
+          </aside>
+        </section>
+
+        <section>
+          <pre>
+            <code class="language-javascript" data-trim>
+            // Pseudo-code
+            [
+              AESEncrypt("The quick brown ", k, iv1)
+              AESEncrypt("fox jumped over ", k, iv2),
+              AESEncrypt(pkcs7("the lazy dog"), k, iv3])
+            ]
+            </code>
+          </pre>
+          <aside class="notes">
+            We could generate a separate IV for every block but this would literally double the size of the output
+            Ciphertext. Not to mention the additional CPU overhead in generating all of the IVs.
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/CBC.png" /> 
+          <aside class="notes">
+            Thankfully, cryptographers have solved this problem by using the previous block as an IV for the next block.
+            This is called Cipher Block Chaining or CBC and the first of what we call a Mode of Operation for AES.
+          </aside>
+        </section>
+
+        <section>
+          <pre>
+            <code class="language-javascript" data-trim data-line-numbers="1|2|3|4|5-6">
+ let iv = window.crypto.getRandomValues(new Uint8Array(16))
+ let ct = await crypto.subtle.encrypt(
+   {name: "AES-CBC", iv: iv},
+   key,
+   enc.encode('A secret message')
+ )
+            </code>
+          </pre>
+          <aside class="notes">
+            CBC is supported by the web crypto API. To use it, we first generate a random 128-bit IV,
+            then use the encrypt function which takes the algorithm object, this time specifying "AES-CBC" along with the IV,
+            a cryptoKey and an encoded plaintext.
+          </aside>
+        </section>
+
+        <section>
+          <pre>
+            <code class="language-javascript" data-trim>
+ dec.decode(await crypto.subtle.decrypt(
+   {name: "AES-CBC", iv: iv}, key, ct)
+ ))
+ // => 'A secret message'
+            </code>
+          </pre>
+          <aside class="notes">
+            Decrypting is very similar but this time we use the decrypt function.
+            Notice that we use the same IV to decrypt as we used to encrypt.
+          </aside>
+        </section>
+
+        <section>
+          <h3>IVs are not secret</h3>
+          <pre>
+            <code class="language-json" data-trim>
+{
+  "ciphertext": "DF417FF31FE912EBA72C4051DF6D4643",
+  "iv": "C7D322B83B65ED1A7DBCB60907CFEBCB"
+}
+            </code>
+          </pre>
+          <aside class="notes">
+            Most applications will just store the IV along with the CipherText, say as hex encoded strings in a JSON object.
+            That's OK because the IV isn't secret. It just can't repeat.
+          </aside>
+        </section>
+
+        <section>
+          <h2><strong>Wait!</strong></h2>
+          <aside class="notes">
+            However, there is still a big problem with CBC (and others like it). The encrypted CipherTexts are not
+            resistant to tampering and this can lead to quite nasty attacks.
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/authenticity-1.png" />
+          <aside class="notes">
+            Consider, Alice who sends an encrypted message to Bob asking him to pay Eve $10.
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/authenticity-2.png" />
+          <aside class="notes">
+            Eve is able to intercept the message and although she can't read it, is able to modify
+            the encrypted data such that Bob decrypts a valid, but different message.
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/CBC-decrypt.png" />
+          <aside class="notes">
+            We can see why CBC is vulnerable to this kind of attack by looking at how it
+            decrypts data.
+            <br/>
+            The process is basically the reverse of encryption but the IV is XORed with the output of the
+            decryption just before returning. 
+          </aside>
+        </section>
+
+        <section>
+          <img src="images/CBC-decrypt-tamper.png" />
+          <aside class="notes">
+            Therefore, tampering with the IV, allows an attacker to change the decrypted message.
+            In this case, changing the amount from 1000 to 9000.
+          </aside>
+        </section>
+
+        <section>
+          <pre>
+            <code class="language-javascript" data-trim data-line-numbers="1-6|7|8-11">
+ let iv = window.crypto.getRandomValues(new Uint8Array(16))
+ let ct = await crypto.subtle.encrypt(
+   {name: "AES-CBC", iv: iv},
+   key,
+   enc.encode('{"amount":1000, id: "1234"}')
+ )
+ iv.set([1], 10)
+ dec.decode(await crypto.subtle.decrypt(
+   {name: "AES-CBC", iv: iv}, key, ct)
+ ))
+ // => '{"amount":9000, id: "1234"}
+            </code>
+          </pre>
+          <aside class="notes">
+            This is an easy attack to perform in JavaScript.
+            Take a JSON message containing an amount with value 1000 encrypted using CBC and a random IV.
+            Using a through trial and error we can set the corresponding byte in the IV such that when the message is decrypted,
+            the amount has now changed to *9000*! There are only 256 possible values for each byte so trial and finding an IV byte
+            that gives the desired byte in the message doesn't take long.
+            <br/>
+            The person decrypting the message would be none the wiser.
+            <br/>
+            What we want is a way to detect if a message has been tampered with and discard it if so.
+          </aside>
+        </section>
+
+        <section>
+          <h2>4. Authenticated Associated Data</h2>
+
+          <aside class="notes">
+            So this brings us to our final step, adding authentication and authenticated associated data.
+          </aside>
+        </section>
+
+        <section>
+          <h3>AES-GCM</h3>
+          <p>Galois Counter Mode</p>
+          <aside class="notes">
+            Authenticated encryption modes use the concept of a tag that can be used to verify the integrity
+            of a message before or during decryption.
+            <br/>
+            Probably the best known, and recommended mode is AES-GCM or Galois Counter Mode.
+          </aside>
+        </section>
+
+        <section>
+          <p>Encrypting using GCM</p>
+          <pre>
+            <code data-trim class="language-javascript">
 let ciphertext = await crypto.subtle.encrypt(
   {
     name: "AES-GCM",
@@ -264,12 +705,106 @@ let ciphertext = await crypto.subtle.encrypt(
 )
             </code>
           </pre>
+          <aside class="notes">
+            Encrypting using GCM mode looks much like the process for CBC mode.
+          </aside>
         </section>
+
+        <section>
+          <pre>
+            <code class="language-javascript">
+ iv.set([45], 10)
+ dec.decode(await crypto.subtle.decrypt(
+   {name: "AES-GCM", iv: iv}, key, ct)
+ ))
+ // => DOMException
+            </code>
+          </pre>
+          <aside class="notes">
+            Except this time, attempting to decrypt a tampered ciphertext or with a modified IV, will fail
+            with a DOMException.
+            <br/>
+            Web crypto won't say why it failed however, as that would potentially give an attacker an advantage.
+          </aside>
+        </section>
+
+        <section>
+          <pre>
+            <code class="language-javascript" data-line-numbers="5" data-trim>
+let ciphertext = await crypto.subtle.encrypt(
+  {
+    name: "AES-GCM",
+    iv: iv,
+    additionalData: '{"keyId": "b82daa3f-3eac-4c..."}'
+  },
+  key,
+  plaintext
+)
+            </code>
+          </pre>
+          <aside class="notes">
+            We can use authenticated encryption to tag additional data that isn't necessarily secret but that we
+            want to be resistant to tampering. This is called the Authenticated Associated Data or AAD.
+            <br/>
+            You can store anything in the AAD but a common pattern is to assign a unique ID to the key that was used
+            at store that in the AAD so decryptors know which key to use.
+            <br/>
+            Now decryption will fail if the AAD is tampered with as well.
+          </aside>
+        </section>
+
+        <section>
+          <h3>No padding required</h3>
+          <aside class="notes">
+            Another advantage of AES-GCM is that it doesn't require padding. That means that Ciphertexts
+            are the same length as the plaintexts (excluding the IV, Tag or AAD) and don't have to be a multiple
+            of 16-bytes which for many applications can save a lot of space!
+          </aside>
+        </section>
+
+        <section>
+          <h3>AES-GCM</h3>
+          <p><strong>Recommendations:</strong> NIST publication 800-38D</p>
+          <aside class="notes">
+            AES-GCM is probably the only mode you should consider for new applications.
+            And if you want to go deeper, I recommend checking out the NIST standard publications
+            for recommendations on key usage, IV guidelines and the use of Authenticated Associated Data.
+          </aside>
+        </section>
+
+        <section>
+          <h3>Final Thoughts</h3>
+          <ul>
+            <li>Doing crypto is harder than it seems!</li>
+            <li>Get your code reviewed before going live</li>
+            <li>Learn more: <a href="https://w3c.github.io/webcrypto">w3c.github.io/webcrypto</a></li>
+          </ul>
+          <aside class="notes">
+            A few final thoughts. Doing crypto is harder than it seems. Lots can go wrong so make sure you follow the best practices.
+            I recommend getting an experienced cryptography engineer to review your code before going live if you can.
+            If you want to learn more about Web Crypto, you can find the spec on the W3C Github.
+          </aside>
+        </section>
+
+        <section>
+          <h3>About me</h3>
+          <ul>
+            <li>Twitter <em>@danieldraper</em></li>
+            <li>Email <em>dan@cipherstash.com</em></li>
+            <li>Web <em>cipherstash.com</em></li>
+          </ul>
+          <p>...and we're hiring :)</p>
+          <aside class="notes">
+            So I hope you've found this talk interesting and useful. In case you missed it, I'm the founder at CipherStash
+            and we're building a searchable encryption platform that's easy to use. Feel to get in touch. I'm always up for a chat.
+            Thanks a lot!
+          </aside>
+        </section>
+
 
         <!-- TODO: use cases -->
         <!-- TODO: Quantum Safety -->
-        <!-- TODO: Advantages of AES-GCM over other modes, talk about other modes, FIPS etc -->
-        <!-- TODO: Smells, show case studies of mistakes in implementation (e.g. reusing IVs) -->
+        <!-- explain web crypto and subtle module -->
 			</div>
 		</div>
 
